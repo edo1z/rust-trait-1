@@ -4,19 +4,21 @@ struct User {
     name: String,
 }
 
-struct Repositories<'a, U>
-where
-    U: UserRepo,
-{
-    user: &'a U,
+struct RepoImpls<'a> {
+    user: &'a UserRepoImpl
 }
-impl<'a, U> Repositories<'a, U>
-where
-    U: UserRepo,
-{
-    fn new(user_repo: &'a U) -> Self {
-        Self { user: user_repo }
+impl<'a> RepoImpls<'a> {
+    fn new(user_repo_impl: &'a UserRepoImpl) -> Self {
+        Self { user: user_repo_impl }
     }
+}
+trait Repositories<'a> {
+    type UserRepoImpl: UserRepo;
+    fn user(&self) -> &'a Self::UserRepoImpl;
+}
+impl<'a> Repositories<'a> for RepoImpls<'a> {
+    type UserRepoImpl = UserRepoImpl;
+    fn user(&self) -> &'a Self::UserRepoImpl { &self.user }
 }
 
 struct UserRepoImpl {}
@@ -35,21 +37,30 @@ impl UserRepo for UserRepoImpl {
 
 fn main() {
     let user_repo_impl = UserRepoImpl {};
-    let repo = Repositories::new(&user_repo_impl);
-    let users = find_all(&repo);
+    let repo_impls = RepoImpls::new(&user_repo_impl);
+    let users = find_all(&repo_impls);
     println!("{users}");
 }
 
-fn find_all<'a, U>(repo: &Repositories<'a, U>) -> String
-where
-    U: UserRepo,
-{
-    let users = repo.user.find_all().unwrap();
+fn find_all<'a, R:Repositories<'a>>(repo: &'a R) -> String {
+    let users = repo.user().find_all().unwrap();
     format!("{}:{}", users[0].id, users[0].name)
 }
 
 #[test]
 fn test_find_all() {
+    struct MockRepoImpls<'a> {
+        user: &'a MockUserRepoImpl
+    }
+    impl<'a> MockRepoImpls<'a> {
+        fn new(user_repo_impl: &'a MockUserRepoImpl) -> Self {
+            Self { user: user_repo_impl }
+        }
+    }
+    impl<'a> Repositories<'a> for MockRepoImpls<'a> {
+        type UserRepoImpl = MockUserRepoImpl;
+        fn user(&self) -> &'a Self::UserRepoImpl { &self.user }
+    }
     struct MockUserRepoImpl {}
     impl UserRepo for MockUserRepoImpl {
         fn find_all(&self) -> Result<Vec<User>, String> {
@@ -61,7 +72,7 @@ fn test_find_all() {
         }
     }
     let mock_user_repo_impl = MockUserRepoImpl {};
-    let repo = Repositories::new(&mock_user_repo_impl);
-    let users = find_all(&repo);
+    let repo_impls = MockRepoImpls::new(&mock_user_repo_impl);
+    let users = find_all(&repo_impls);
     assert_eq!(users, String::from("1:taro"));
 }
