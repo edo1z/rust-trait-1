@@ -40,14 +40,17 @@ pub mod repositories {
     pub mod user_repo {
         use crate::model::user::User;
         use mockall::automock;
+        use async_trait::async_trait;
 
         pub struct UserRepoImpl {}
         #[automock]
+        #[async_trait]
         pub trait UserRepo {
-            fn find_all(&self) -> Result<Vec<User>, String>;
+            async fn find_all(&self) -> Result<Vec<User>, String>;
         }
+        #[async_trait]
         impl UserRepo for UserRepoImpl {
-            fn find_all(&self) -> Result<Vec<User>, String> {
+            async fn find_all(&self) -> Result<Vec<User>, String> {
                 let user = User {
                     id: 10,
                     name: String::from("Bob"),
@@ -58,15 +61,16 @@ pub mod repositories {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let user_repo_impl = UserRepoImpl {};
     let repo_impls = RepoImpls::new(&user_repo_impl);
-    let users = find_all(&repo_impls);
+    let users = find_all(&repo_impls).await;
     println!("{users}");
 }
 
-fn find_all<'a, R: Repositories<'a>>(repo: &'a R) -> String {
-    let users = repo.user().find_all().unwrap();
+async fn find_all<'a, R: Repositories<'a>>(repo: &'a R) -> String {
+    let users = repo.user().find_all().await.unwrap();
     format!("{}:{}", users[0].id, users[0].name)
 }
 
@@ -76,8 +80,8 @@ mod tests {
     use crate::model::user::User;
     use crate::repositories::user_repo::MockUserRepo;
 
-    #[test]
-    fn test_find_all() {
+    #[tokio::test]
+    async fn test_find_all() {
         struct MockRepoImpls<'a> {
             user: &'a MockUserRepo,
         }
@@ -103,7 +107,7 @@ mod tests {
             .expect_find_all()
             .returning(move || Ok(vec![user_fixture.clone()]));
         let mock_repo_impls = MockRepoImpls::new(&mock_user_repo_impl);
-        let users = find_all(&mock_repo_impls);
+        let users = find_all(&mock_repo_impls).await;
         assert_eq!(users, String::from("1:taro"));
     }
 }
