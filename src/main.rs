@@ -1,44 +1,60 @@
-use mockall::automock;
+use crate::repositories::{
+    user_repo::{UserRepo, UserRepoImpl},
+    RepoImpls, Repositories,
+};
 
-#[derive(Debug, Clone)]
-pub struct User {
-    pub id: u32,
-    pub name: String,
-}
-
-struct RepoImpls<'a> {
-    user: &'a UserRepoImpl,
-}
-impl<'a> RepoImpls<'a> {
-    fn new(user_repo_impl: &'a UserRepoImpl) -> Self {
-        Self {
-            user: user_repo_impl,
+pub mod model {
+    pub mod user {
+        #[derive(Debug, Clone)]
+        pub struct User {
+            pub id: u32,
+            pub name: String,
         }
     }
 }
-trait Repositories<'a> {
-    type UserRepoImpl: UserRepo;
-    fn user(&self) -> &'a Self::UserRepoImpl;
-}
-impl<'a> Repositories<'a> for RepoImpls<'a> {
-    type UserRepoImpl = UserRepoImpl;
-    fn user(&self) -> &'a Self::UserRepoImpl {
-        &self.user
-    }
-}
 
-pub struct UserRepoImpl {}
-#[automock]
-trait UserRepo {
-    fn find_all(&self) -> Result<Vec<User>, String>;
-}
-impl UserRepo for UserRepoImpl {
-    fn find_all(&self) -> Result<Vec<User>, String> {
-        let user = User {
-            id: 10,
-            name: String::from("Bob"),
-        };
-        Ok(vec![user])
+pub mod repositories {
+    use user_repo::{UserRepo, UserRepoImpl};
+
+    pub struct RepoImpls<'a> {
+        user: &'a UserRepoImpl,
+    }
+    impl<'a> RepoImpls<'a> {
+        pub fn new(user_repo_impl: &'a UserRepoImpl) -> Self {
+            Self {
+                user: user_repo_impl,
+            }
+        }
+    }
+    pub trait Repositories<'a> {
+        type UserRepoImpl: UserRepo;
+        fn user(&self) -> &'a Self::UserRepoImpl;
+    }
+    impl<'a> Repositories<'a> for RepoImpls<'a> {
+        type UserRepoImpl = UserRepoImpl;
+        fn user(&self) -> &'a Self::UserRepoImpl {
+            &self.user
+        }
+    }
+
+    pub mod user_repo {
+        use crate::model::user::User;
+        use mockall::automock;
+
+        pub struct UserRepoImpl {}
+        #[automock]
+        pub trait UserRepo {
+            fn find_all(&self) -> Result<Vec<User>, String>;
+        }
+        impl UserRepo for UserRepoImpl {
+            fn find_all(&self) -> Result<Vec<User>, String> {
+                let user = User {
+                    id: 10,
+                    name: String::from("Bob"),
+                };
+                Ok(vec![user])
+            }
+        }
     }
 }
 
@@ -54,33 +70,40 @@ fn find_all<'a, R: Repositories<'a>>(repo: &'a R) -> String {
     format!("{}:{}", users[0].id, users[0].name)
 }
 
-#[test]
-fn test_find_all() {
-    struct MockRepoImpls<'a> {
-        user: &'a MockUserRepo,
-    }
-    impl<'a> MockRepoImpls<'a> {
-        fn new(mock_user_repo_impl: &'a MockUserRepo) -> Self {
-            Self {
-                user: mock_user_repo_impl,
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::user::User;
+    use crate::repositories::user_repo::MockUserRepo;
+
+    #[test]
+    fn test_find_all() {
+        struct MockRepoImpls<'a> {
+            user: &'a MockUserRepo,
+        }
+        impl<'a> MockRepoImpls<'a> {
+            fn new(mock_user_repo_impl: &'a MockUserRepo) -> Self {
+                Self {
+                    user: mock_user_repo_impl,
+                }
             }
         }
-    }
-    impl<'a> Repositories<'a> for MockRepoImpls<'a> {
-        type UserRepoImpl = MockUserRepo;
-        fn user(&self) -> &'a Self::UserRepoImpl {
-            &self.user
+        impl<'a> Repositories<'a> for MockRepoImpls<'a> {
+            type UserRepoImpl = MockUserRepo;
+            fn user(&self) -> &'a Self::UserRepoImpl {
+                &self.user
+            }
         }
+        let mut mock_user_repo_impl = MockUserRepo::new();
+        let user_fixture = User {
+            id: 1,
+            name: String::from("taro"),
+        };
+        mock_user_repo_impl
+            .expect_find_all()
+            .returning(move || Ok(vec![user_fixture.clone()]));
+        let mock_repo_impls = MockRepoImpls::new(&mock_user_repo_impl);
+        let users = find_all(&mock_repo_impls);
+        assert_eq!(users, String::from("1:taro"));
     }
-    let mut mock_user_repo_impl = MockUserRepo::new();
-    let user_fixture = User {
-        id: 1,
-        name: String::from("taro"),
-    };
-    mock_user_repo_impl
-        .expect_find_all()
-        .returning( move || Ok(vec![user_fixture.clone()]));
-    let mock_repo_impls = MockRepoImpls::new(&mock_user_repo_impl);
-    let users = find_all(&mock_repo_impls);
-    assert_eq!(users, String::from("1:taro"));
 }
